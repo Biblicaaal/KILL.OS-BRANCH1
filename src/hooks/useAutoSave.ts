@@ -14,7 +14,9 @@ function stripNotifications(state: AppState): PersistableState {
   return rest;
 }
 
-export async function loadStateFromCloud(): Promise<PersistableState | null> {
+// Returns raw persisted data and the cloud timestamp.
+// The caller is responsible for hydrating it through their own hydrate function.
+export async function loadStateFromCloud(): Promise<{ data: Record<string, unknown>; cloudTime: number } | null> {
   try {
     const { data, error } = await supabase
       .from('app_state')
@@ -24,8 +26,8 @@ export async function loadStateFromCloud(): Promise<PersistableState | null> {
 
     if (error || !data) return null;
 
-    const cloudData = data.data as PersistableState;
     const cloudTime = new Date(data.updated_at).getTime();
+    const cloudData = data.data as Record<string, unknown>;
 
     // Compare with localStorage timestamp
     const localRaw = localStorage.getItem(LOCAL_STORAGE_KEY);
@@ -35,11 +37,11 @@ export async function loadStateFromCloud(): Promise<PersistableState | null> {
 
       // Use whichever is newer
       if (localTime > cloudTime) {
-        return localParsed;
+        return { data: localParsed, cloudTime: localTime };
       }
     }
 
-    return cloudData;
+    return { data: cloudData, cloudTime };
   } catch {
     return null;
   }

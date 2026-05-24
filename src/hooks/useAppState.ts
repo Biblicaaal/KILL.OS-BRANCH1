@@ -323,7 +323,7 @@ function hydrateFromPersisted(p: any): AppState {
     totalMoneySpent: p.totalMoneySpent ?? 0,
     resources: p.resources ?? {},
     streak: { ...DEFAULT_STREAK, ...p.streak },
-    rewards: p.rewards ?? DEFAULT_REWARDS,
+    rewards: (p.rewards ?? DEFAULT_REWARDS).map((r: StoreReward) => ({ ...r, icon: r.icon || 'gift' })),
     redeemables: p.redeemables ?? [],
     rewardCooldowns: p.rewardCooldowns ?? {},
     calendar: p.calendar ?? {},
@@ -363,9 +363,10 @@ export function useAppState() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const cloudState = await loadStateFromCloud();
-      if (!cancelled && cloudState) {
-        setState(cloudState as AppState);
+      const result = await loadStateFromCloud();
+      if (!cancelled && result) {
+        const hydrated = hydrateFromPersisted(result.data);
+        setState(hydrated);
       }
     })();
     return () => { cancelled = true; };
