@@ -20,8 +20,8 @@ import { ResourceBar } from './components/ResourceBar';
 import { NotificationStack } from './components/NotificationStack';
 import { TaskModal } from './components/TaskModal';
 import { useAppState } from './hooks/useAppState';
-import { getRank } from './constants';
-import type { AppState, DashboardWidgetConfig, DashboardWidgetId, TabId, TaskDefinition } from './types';
+import { getRank, WIDGET_SIZES, RESOURCE_DEFS } from './constants';
+import type { AppState, DashboardWidgetConfig, DashboardWidgetId, TabId, TaskDefinition, WidgetSize } from './types';
 
 const SIDEBAR_EXPANDED = 220;
 const SIDEBAR_COLLAPSED = 70;
@@ -196,10 +196,6 @@ export default function App() {
               <span className="text-2xl">+</span>
               <span className="text-xs font-bold tracking-widest">ADD TASK</span>
             </button>
-
-            {completedTasks === totalTasks && totalTasks > 0 && (
-              <MissionComplete rankColor={currentRank.color} rank={currentRank.rank} />
-            )}
             </div>
 
             <DashboardWidgets
@@ -564,10 +560,27 @@ function ComboWidget({ multiplier, comboTimeLeft, comboWindowMs }: ComboWidgetPr
 }
 
 const WIDGET_LABELS: Record<DashboardWidgetId, string> = {
+  daily_progress: 'Daily Progress',
   telemetry: 'Mission Telemetry',
   targets: 'Next Targets',
   focus: 'Focus Module',
   unlocks: 'Recent Unlocks',
+  streak: 'Streak & Consistency',
+  economy: 'Economy',
+  resources: 'Resource Vault',
+  timeline: 'Recent Activity',
+};
+
+const WIDGET_COLORS: Record<DashboardWidgetId, string> = {
+  daily_progress: '#00e0ff',
+  telemetry: '#00e0ff',
+  targets: '#ffcc00',
+  focus: '#cc44ff',
+  unlocks: '#ff2ed1',
+  streak: '#ff8800',
+  economy: '#ffcc00',
+  resources: '#33ffcc',
+  timeline: '#4488ff',
 };
 
 function DashboardWidgets({ state, completedTasks, totalTasks, completionPercent, onStartFocus, widgets, onUpdateWidgets }: {
@@ -586,47 +599,29 @@ function DashboardWidgets({ state, completedTasks, totalTasks, completionPercent
   const [swappingWidgets, setSwappingWidgets] = useState<{ from: DashboardWidgetId; to: DashboardWidgetId } | null>(null);
   const widgetRefs = useRef<Map<DashboardWidgetId, HTMLDivElement>>(new Map());
   const positionsRef = useRef<Map<DashboardWidgetId, DOMRect>>(new Map());
-  const remainingTasks = Math.max(totalTasks - completedTasks, 0);
-  const nextTasks = state.tasks
-    .filter(t => (state.progress[t.id] ?? 0) < t.dailyTarget)
-    .slice(0, 4);
-  const latestAchievements = state.achievements
-    .filter(a => a.unlockedAt !== null)
-    .sort((a, b) => (b.unlockedAt ?? 0) - (a.unlockedAt ?? 0))
-    .slice(0, 3);
-  const focusMinutes = Math.floor(state.focusTotalMs / 60000);
 
-  // FLIP animation: Apply inverse transform after DOM update, then animate to final position
+  const enabledWidgets = widgets.filter(w => w.enabled);
+  const bigWidget = enabledWidgets.find(w => WIDGET_SIZES[w.id] === 'big');
+  const normalWidgets = enabledWidgets.filter(w => WIDGET_SIZES[w.id] !== 'big');
+
+  // FLIP animation
   useLayoutEffect(() => {
     if (!swappingWidgets) return;
-
     const oldPositions = positionsRef.current;
-
-    // Get the elements and their new positions (FLIP: Last)
     widgetRefs.current.forEach((el, id) => {
       if (!el) return;
       const oldRect = oldPositions.get(id);
       if (!oldRect) return;
-
       const newRect = el.getBoundingClientRect();
       const deltaX = oldRect.left - newRect.left;
       const deltaY = oldRect.top - newRect.top;
-
-      // Only animate if there's actual movement in any direction
       if (Math.abs(deltaX) > 1 || Math.abs(deltaY) > 1) {
-        // Apply inverse transform (FLIP: Invert)
         el.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
         el.style.transition = 'none';
         el.style.zIndex = '20';
-
-        // Force reflow
         el.offsetHeight;
-
-        // Animate to final position (FLIP: Play)
         el.style.transition = 'transform 0.4s cubic-bezier(0.22, 1, 0.36, 1)';
         el.style.transform = 'translate(0, 0)';
-
-        // Clean up after animation
         const cleanup = () => {
           el.style.transform = '';
           el.style.transition = '';
@@ -640,122 +635,89 @@ function DashboardWidgets({ state, completedTasks, totalTasks, completionPercent
 
   const moveWidgetTo = (dragId: DashboardWidgetId, targetId: DashboardWidgetId) => {
     if (dragId === targetId) return;
-    const dragIndex = widgets.findIndex(widget => widget.id === dragId);
-    const targetIndex = widgets.findIndex(widget => widget.id === targetId);
+    const dragIndex = widgets.findIndex(w => w.id === dragId);
+    const targetIndex = widgets.findIndex(w => w.id === targetId);
     if (dragIndex < 0 || targetIndex < 0) return;
-
-    // Capture current positions before DOM update (FLIP: First)
     const positions = new Map<DashboardWidgetId, DOMRect>();
-    widgetRefs.current.forEach((el, id) => {
-      if (el) positions.set(id, el.getBoundingClientRect());
-    });
+    widgetRefs.current.forEach((el, id) => { if (el) positions.set(id, el.getBoundingClientRect()); });
     positionsRef.current = positions;
-
-    // Trigger swap animation
     setSwappingWidgets({ from: dragId, to: targetId });
-
-    // Swap the two widgets directly (no shifting of other widgets)
     const next = [...widgets];
     const temp = next[dragIndex];
     next[dragIndex] = next[targetIndex];
     next[targetIndex] = temp;
     onUpdateWidgets(next);
-
-    // Clear swap state after animation
     setTimeout(() => setSwappingWidgets(null), 400);
   };
 
   const replaceWidget = (slotId: DashboardWidgetId, nextId: DashboardWidgetId) => {
     if (slotId === nextId) return;
-    const slotIndex = widgets.findIndex(widget => widget.id === slotId);
-    const nextIndex = widgets.findIndex(widget => widget.id === nextId);
+    const slotIndex = widgets.findIndex(w => w.id === slotId);
+    const nextIndex = widgets.findIndex(w => w.id === nextId);
     if (slotIndex < 0 || nextIndex < 0) return;
-
     const next = [...widgets];
     const selected = { ...next[nextIndex], enabled: true };
     const current = { ...next[slotIndex], enabled: next[nextIndex].enabled };
-
     next[slotIndex] = selected;
     next[nextIndex] = current;
     onUpdateWidgets(next);
   };
 
   const renderWidget = (id: DashboardWidgetId) => {
+    const color = WIDGET_COLORS[id];
     switch (id) {
+      case 'daily_progress':
+        return (
+          <WidgetShell widgetId={id} title="DAILY PROGRESS" color={color} widgets={widgets} onReplace={replaceWidget} size="big">
+            <DailyProgressWidget state={state} completedTasks={completedTasks} totalTasks={totalTasks} completionPercent={completionPercent} onStartFocus={onStartFocus} />
+          </WidgetShell>
+        );
       case 'telemetry':
         return (
-          <WidgetShell widgetId={id} title="MISSION TELEMETRY" color="#00e0ff" widgets={widgets} onReplace={replaceWidget}>
-            <div className="grid grid-cols-2 gap-2">
-              <WidgetStat label="DONE" value={`${completedTasks}/${totalTasks}`} color="#33ffcc" />
-              <WidgetStat label="LEFT" value={remainingTasks.toString()} color="#ffcc00" />
-              <WidgetStat label="XP" value={state.totalPointsToday.toLocaleString()} color="#ff2ed1" />
-              <WidgetStat label="BEST COMBO" value={`x${Math.floor(state.combo.peakToday).toLocaleString()}`} color="#ff8800" />
-            </div>
-            <div className="mt-3 h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
-              <div
-                className="h-full rounded-full"
-                style={{
-                  width: `${completionPercent}%`,
-                  background: 'linear-gradient(90deg, #00e0ff, #33ffcc)',
-                  boxShadow: '0 0 12px rgba(0,224,255,0.7)',
-                }}
-              />
-            </div>
+          <WidgetShell widgetId={id} title="MISSION TELEMETRY" color={color} widgets={widgets} onReplace={replaceWidget}>
+            <TelemetryWidget state={state} completedTasks={completedTasks} totalTasks={totalTasks} completionPercent={completionPercent} />
           </WidgetShell>
         );
       case 'targets':
         return (
-          <WidgetShell widgetId={id} title="NEXT TARGETS" color="#ffcc00" widgets={widgets} onReplace={replaceWidget}>
-            <div className="space-y-2">
-              {nextTasks.length === 0 ? (
-                <div className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>All task quotas are complete.</div>
-              ) : nextTasks.map(task => {
-                const done = state.progress[task.id] ?? 0;
-                return (
-                  <div key={task.id} className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="text-xs font-bold truncate" style={{ color: task.color }}>{task.name.toUpperCase()}</div>
-                      <div className="text-[10px]" style={{ color: 'rgba(255,255,255,0.28)' }}>{task.category}</div>
-                    </div>
-                    <div className="text-xs font-black tabular-nums" style={{ color: '#ffffff' }}>{done}/{task.dailyTarget}</div>
-                  </div>
-                );
-              })}
-            </div>
+          <WidgetShell widgetId={id} title="NEXT TARGETS" color={color} widgets={widgets} onReplace={replaceWidget}>
+            <TargetsWidget state={state} />
           </WidgetShell>
         );
       case 'focus':
         return (
-          <WidgetShell widgetId={id} title="FOCUS MODULE" color="#cc44ff" widgets={widgets} onReplace={replaceWidget}>
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="text-2xl font-black" style={{ color: '#cc44ff', textShadow: '0 0 14px rgba(204,68,255,0.5)' }}>
-                  {focusMinutes}m
-                </div>
-                <div className="text-[10px] tracking-widest" style={{ color: 'rgba(255,255,255,0.35)' }}>TOTAL FOCUS</div>
-              </div>
-              <button
-                onClick={onStartFocus}
-                className="px-3 py-2 rounded text-[10px] font-bold tracking-widest"
-                style={{ background: 'rgba(204,68,255,0.12)', border: '1px solid rgba(204,68,255,0.35)', color: '#cc44ff' }}
-              >
-                START
-              </button>
-            </div>
+          <WidgetShell widgetId={id} title="FOCUS MODULE" color={color} widgets={widgets} onReplace={replaceWidget}>
+            <FocusWidget state={state} onStartFocus={onStartFocus} />
           </WidgetShell>
         );
       case 'unlocks':
         return (
-          <WidgetShell widgetId={id} title="RECENT UNLOCKS" color="#ff2ed1" widgets={widgets} onReplace={replaceWidget}>
-            <div className="space-y-2">
-              {latestAchievements.length === 0 ? (
-                <div className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>No achievements unlocked yet.</div>
-              ) : latestAchievements.map(achievement => (
-                <div key={achievement.id} className="text-xs font-bold truncate" style={{ color: achievement.color }}>
-                  {achievement.name.toUpperCase()}
-                </div>
-              ))}
-            </div>
+          <WidgetShell widgetId={id} title="RECENT UNLOCKS" color={color} widgets={widgets} onReplace={replaceWidget}>
+            <UnlocksWidget state={state} />
+          </WidgetShell>
+        );
+      case 'streak':
+        return (
+          <WidgetShell widgetId={id} title="STREAK & CONSISTENCY" color={color} widgets={widgets} onReplace={replaceWidget}>
+            <StreakWidget state={state} />
+          </WidgetShell>
+        );
+      case 'economy':
+        return (
+          <WidgetShell widgetId={id} title="ECONOMY" color={color} widgets={widgets} onReplace={replaceWidget}>
+            <EconomyWidget state={state} />
+          </WidgetShell>
+        );
+      case 'resources':
+        return (
+          <WidgetShell widgetId={id} title="RESOURCE VAULT" color={color} widgets={widgets} onReplace={replaceWidget}>
+            <ResourcesWidget state={state} />
+          </WidgetShell>
+        );
+      case 'timeline':
+        return (
+          <WidgetShell widgetId={id} title="RECENT ACTIVITY" color={color} widgets={widgets} onReplace={replaceWidget}>
+            <TimelineWidget state={state} />
           </WidgetShell>
         );
       default:
@@ -763,120 +725,87 @@ function DashboardWidgets({ state, completedTasks, totalTasks, completionPercent
     }
   };
 
+  const renderDraggableWidget = (widget: DashboardWidgetConfig) => {
+    const isDragging = draggingWidget === widget.id;
+    const isDragOver = dragOverWidget === widget.id && draggingWidget !== widget.id;
+    const isJustDropped = justDroppedWidget === widget.id;
+    const isLifting = liftingWidget === widget.id;
+    const isSwapping = swappingWidgets && (swappingWidgets.from === widget.id || swappingWidgets.to === widget.id);
+    const size = WIDGET_SIZES[widget.id];
+
+    return (
+      <div
+        key={widget.id}
+        ref={el => { if (el) widgetRefs.current.set(widget.id, el); else widgetRefs.current.delete(widget.id); }}
+        draggable
+        onDragStart={event => {
+          setLiftingWidget(widget.id);
+          setTimeout(() => { setDraggingWidget(widget.id); setLiftingWidget(null); }, 50);
+          event.dataTransfer.effectAllowed = 'move';
+          const elem = event.currentTarget as HTMLElement;
+          const rect = elem.getBoundingClientRect();
+          event.dataTransfer.setDragImage(elem, rect.width / 2, rect.height / 2);
+        }}
+        onDragOver={event => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'move';
+          if (draggingWidget && draggingWidget !== widget.id) setDragOverWidget(widget.id);
+        }}
+        onDragLeave={() => setDragOverWidget(null)}
+        onDrop={event => {
+          event.preventDefault();
+          if (draggingWidget && draggingWidget !== widget.id) {
+            moveWidgetTo(draggingWidget, widget.id);
+            setJustDroppedWidget(draggingWidget);
+            setTimeout(() => setJustDroppedWidget(null), 400);
+          }
+          setDraggingWidget(null);
+          setDragOverWidget(null);
+        }}
+        onDragEnd={() => { setDraggingWidget(null); setDragOverWidget(null); setLiftingWidget(null); }}
+        className={`widget-drag-container ${isSwapping ? 'widget-swapping' : ''} ${isDragging ? 'widget-dragging' : ''} ${isLifting ? 'widget-lifting' : ''} ${isDragOver ? 'widget-drag-over' : ''} ${size === 'big' ? 'widget-big' : ''}`}
+        style={{
+          cursor: isDragging ? 'grabbing' : 'grab',
+          opacity: isDragging ? 0.4 : 1,
+          boxShadow: isDragging ? 'none'
+            : isLifting ? '0 12px 40px rgba(0,224,255,0.25), 0 0 0 2px rgba(0,224,255,0.3)'
+            : isDragOver ? '0 0 0 2px rgba(0,224,255,0.5), 0 8px 32px rgba(0,224,255,0.2)'
+            : isSwapping ? '0 0 25px rgba(0,224,255,0.35), 0 0 0 1px rgba(0,224,255,0.2)'
+            : isJustDropped ? '0 0 20px rgba(0,224,255,0.4)'
+            : 'none',
+          borderRadius: '8px',
+          position: 'relative',
+          zIndex: isSwapping || isLifting ? 10 : 'auto',
+        }}
+      >
+        {isDragOver && (
+          <div className="absolute inset-0 rounded-lg pointer-events-none" style={{ border: '2px dashed rgba(0,224,255,0.6)', background: 'rgba(0,224,255,0.05)', animation: 'widget-drop-pulse 1s ease-in-out infinite', zIndex: 10 }} />
+        )}
+        {isLifting && (
+          <div className="absolute inset-0 rounded-lg pointer-events-none" style={{ background: 'radial-gradient(ellipse at center, rgba(0,224,255,0.15) 0%, transparent 70%)', animation: 'widget-lift-glow 0.3s ease-out', zIndex: -1 }} />
+        )}
+        {isJustDropped && (
+          <div className="absolute inset-0 rounded-lg pointer-events-none" style={{ background: 'radial-gradient(ellipse at center, rgba(0,224,255,0.2) 0%, transparent 60%)', animation: 'widget-settle 0.4s ease-out forwards', zIndex: -1 }} />
+        )}
+        {renderWidget(widget.id)}
+      </div>
+    );
+  };
+
+  // Layout: big widget at top (spanning full width / 2 cols), then normal widgets in 2-col grid
   return (
     <aside className="dashboard-widgets">
-      {widgets.filter(widget => widget.enabled).map(widget => {
-        const isDragging = draggingWidget === widget.id;
-        const isDragOver = dragOverWidget === widget.id && draggingWidget !== widget.id;
-        const isJustDropped = justDroppedWidget === widget.id;
-        const isLifting = liftingWidget === widget.id;
-        const isSwapping = swappingWidgets && (swappingWidgets.from === widget.id || swappingWidgets.to === widget.id);
+      {/* Big widget slot */}
+      {bigWidget && renderDraggableWidget(bigWidget)}
 
-        return (
-          <div
-            key={widget.id}
-            ref={el => {
-              if (el) widgetRefs.current.set(widget.id, el);
-              else widgetRefs.current.delete(widget.id);
-            }}
-            draggable
-            onDragStart={event => {
-              setLiftingWidget(widget.id);
-              // Small delay to show the lift animation before drag starts
-              setTimeout(() => {
-                setDraggingWidget(widget.id);
-                setLiftingWidget(null);
-              }, 50);
-              event.dataTransfer.effectAllowed = 'move';
-              // Create a custom drag image
-              const elem = event.currentTarget as HTMLElement;
-              const rect = elem.getBoundingClientRect();
-              event.dataTransfer.setDragImage(elem, rect.width / 2, rect.height / 2);
-            }}
-            onDragOver={event => {
-              event.preventDefault();
-              event.dataTransfer.dropEffect = 'move';
-              if (draggingWidget && draggingWidget !== widget.id) {
-                setDragOverWidget(widget.id);
-              }
-            }}
-            onDragLeave={() => {
-              setDragOverWidget(null);
-            }}
-            onDrop={event => {
-              event.preventDefault();
-              if (draggingWidget && draggingWidget !== widget.id) {
-                moveWidgetTo(draggingWidget, widget.id);
-                setJustDroppedWidget(draggingWidget);
-                setTimeout(() => setJustDroppedWidget(null), 400);
-              }
-              setDraggingWidget(null);
-              setDragOverWidget(null);
-            }}
-            onDragEnd={() => {
-              setDraggingWidget(null);
-              setDragOverWidget(null);
-              setLiftingWidget(null);
-            }}
-            className={`widget-drag-container ${isSwapping ? 'widget-swapping' : ''} ${isDragging ? 'widget-dragging' : ''} ${isLifting ? 'widget-lifting' : ''} ${isDragOver ? 'widget-drag-over' : ''}`}
-            style={{
-              cursor: isDragging ? 'grabbing' : 'grab',
-              opacity: isDragging ? 0.4 : 1,
-              boxShadow: isDragging
-                ? 'none'
-                : isLifting
-                ? '0 12px 40px rgba(0,224,255,0.25), 0 0 0 2px rgba(0,224,255,0.3)'
-                : isDragOver
-                ? '0 0 0 2px rgba(0,224,255,0.5), 0 8px 32px rgba(0,224,255,0.2)'
-                : isSwapping
-                ? '0 0 25px rgba(0,224,255,0.35), 0 0 0 1px rgba(0,224,255,0.2)'
-                : isJustDropped
-                ? '0 0 20px rgba(0,224,255,0.4)'
-                : 'none',
-              borderRadius: '8px',
-              position: 'relative',
-              zIndex: isSwapping || isLifting ? 10 : 'auto',
-            }}
-          >
-            {/* Drop zone indicator */}
-            {isDragOver && (
-              <div
-                className="absolute inset-0 rounded-lg pointer-events-none"
-                style={{
-                  border: '2px dashed rgba(0,224,255,0.6)',
-                  background: 'rgba(0,224,255,0.05)',
-                  animation: 'widget-drop-pulse 1s ease-in-out infinite',
-                  zIndex: 10,
-                }}
-              />
-            )}
-            {/* Lift glow effect */}
-            {isLifting && (
-              <div
-                className="absolute inset-0 rounded-lg pointer-events-none"
-                style={{
-                  background: 'radial-gradient(ellipse at center, rgba(0,224,255,0.15) 0%, transparent 70%)',
-                  animation: 'widget-lift-glow 0.3s ease-out',
-                  zIndex: -1,
-                }}
-              />
-            )}
-            {/* Drop settle effect */}
-            {isJustDropped && (
-              <div
-                className="absolute inset-0 rounded-lg pointer-events-none"
-                style={{
-                  background: 'radial-gradient(ellipse at center, rgba(0,224,255,0.2) 0%, transparent 60%)',
-                  animation: 'widget-settle 0.4s ease-out forwards',
-                  zIndex: -1,
-                }}
-              />
-            )}
-            {renderWidget(widget.id)}
-          </div>
-        );
-      })}
-      {widgets.every(widget => !widget.enabled) && (
+      {/* Normal widget grid */}
+      {normalWidgets.length > 0 && (
+        <div className="widget-normal-grid">
+          {normalWidgets.map(w => renderDraggableWidget(w))}
+        </div>
+      )}
+
+      {enabledWidgets.length === 0 && (
         <div className="rounded-lg p-4 text-xs" style={{ color: 'rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
           Enable widgets from the layout panel.
         </div>
@@ -885,29 +814,32 @@ function DashboardWidgets({ state, completedTasks, totalTasks, completionPercent
   );
 }
 
-function WidgetShell({ widgetId, title, color, widgets, onReplace, children }: {
+/* ── Widget Shell ── */
+
+function WidgetShell({ widgetId, title, color, widgets, onReplace, size, children }: {
   widgetId: DashboardWidgetId;
   title: string;
   color: string;
   widgets: DashboardWidgetConfig[];
   onReplace: (slotId: DashboardWidgetId, nextId: DashboardWidgetId) => void;
+  size?: WidgetSize;
   children: ReactNode;
 }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setDropdownOpen(false);
-      }
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) setDropdownOpen(false);
     };
     if (dropdownOpen) {
       document.addEventListener('mousedown', handleClickOutside);
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [dropdownOpen]);
+
+  // Filter dropdown to only show widgets of the same size category
+  const sameSizeWidgets = widgets.filter(w => WIDGET_SIZES[w.id] === (size ?? 'normal'));
 
   return (
     <section
@@ -921,33 +853,16 @@ function WidgetShell({ widgetId, title, color, widgets, onReplace, children }: {
     >
       <div className="flex items-center justify-between gap-3 mb-3">
         <div className="flex items-center gap-2.5">
-          {/* Drag handle indicator */}
-          <div 
-            className="flex flex-col gap-[3px] opacity-25 group-hover:opacity-50 transition-opacity duration-300"
-            style={{ cursor: 'grab' }}
-          >
-            <div className="flex gap-[3px]">
-              <div className="w-1 h-1 rounded-full" style={{ background: color }} />
-              <div className="w-1 h-1 rounded-full" style={{ background: color }} />
-            </div>
-            <div className="flex gap-[3px]">
-              <div className="w-1 h-1 rounded-full" style={{ background: color }} />
-              <div className="w-1 h-1 rounded-full" style={{ background: color }} />
-            </div>
-            <div className="flex gap-[3px]">
-              <div className="w-1 h-1 rounded-full" style={{ background: color }} />
-              <div className="w-1 h-1 rounded-full" style={{ background: color }} />
-            </div>
+          <div className="flex flex-col gap-[3px] opacity-25 group-hover:opacity-50 transition-opacity duration-300" style={{ cursor: 'grab' }}>
+            <div className="flex gap-[3px]"><div className="w-1 h-1 rounded-full" style={{ background: color }} /><div className="w-1 h-1 rounded-full" style={{ background: color }} /></div>
+            <div className="flex gap-[3px]"><div className="w-1 h-1 rounded-full" style={{ background: color }} /><div className="w-1 h-1 rounded-full" style={{ background: color }} /></div>
+            <div className="flex gap-[3px]"><div className="w-1 h-1 rounded-full" style={{ background: color }} /><div className="w-1 h-1 rounded-full" style={{ background: color }} /></div>
           </div>
-          <div 
-            className="text-[10px] font-semibold tracking-[0.15em] uppercase"
-            style={{ color, textShadow: `0 0 20px ${color}40` }}
-          >
+          <div className="text-[10px] font-semibold tracking-[0.15em] uppercase" style={{ color, textShadow: `0 0 20px ${color}40` }}>
             {title}
           </div>
         </div>
-        
-        {/* Custom dropdown */}
+
         <div ref={dropdownRef} className="relative">
           <button
             onClick={() => setDropdownOpen(!dropdownOpen)}
@@ -957,29 +872,13 @@ function WidgetShell({ widgetId, title, color, widgets, onReplace, children }: {
               border: `1px solid ${dropdownOpen ? color + '40' : 'transparent'}`,
               color: dropdownOpen ? color : 'rgba(255,255,255,0.4)',
             }}
-            onMouseEnter={e => {
-              if (!dropdownOpen) {
-                e.currentTarget.style.background = `${color}15`;
-                e.currentTarget.style.color = color;
-              }
-            }}
-            onMouseLeave={e => {
-              if (!dropdownOpen) {
-                e.currentTarget.style.background = 'transparent';
-                e.currentTarget.style.color = 'rgba(255,255,255,0.4)';
-              }
-            }}
+            onMouseEnter={e => { if (!dropdownOpen) { e.currentTarget.style.background = `${color}15`; e.currentTarget.style.color = color; } }}
+            onMouseLeave={e => { if (!dropdownOpen) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.4)'; } }}
             title="Switch widget"
           >
-            <ChevronDown 
-              size={14} 
-              style={{ 
-                transform: dropdownOpen ? 'rotate(180deg)' : 'rotate(0)',
-                transition: 'transform 0.2s ease'
-              }} 
-            />
+            <ChevronDown size={14} style={{ transform: dropdownOpen ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s ease' }} />
           </button>
-          
+
           {dropdownOpen && (
             <div
               className="absolute right-0 top-full mt-2 z-50 min-w-[160px] py-1.5 rounded-lg overflow-hidden"
@@ -991,43 +890,23 @@ function WidgetShell({ widgetId, title, color, widgets, onReplace, children }: {
                 animation: 'dropdown-appear 0.15s ease-out',
               }}
             >
-              {widgets.map(widget => {
+              {sameSizeWidgets.map(widget => {
                 const isActive = widget.id === widgetId;
                 return (
                   <button
                     key={widget.id}
-                    onClick={() => {
-                      if (!isActive) onReplace(widgetId, widget.id);
-                      setDropdownOpen(false);
-                    }}
+                    onClick={() => { if (!isActive) onReplace(widgetId, widget.id); setDropdownOpen(false); }}
                     className="w-full px-3 py-2 text-left text-[11px] font-medium tracking-wide transition-all duration-150 flex items-center gap-2"
                     style={{
                       background: isActive ? `${color}15` : 'transparent',
                       color: isActive ? color : 'rgba(255,255,255,0.6)',
                       borderLeft: isActive ? `2px solid ${color}` : '2px solid transparent',
                     }}
-                    onMouseEnter={e => {
-                      if (!isActive) {
-                        e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
-                        e.currentTarget.style.color = 'rgba(255,255,255,0.9)';
-                      }
-                    }}
-                    onMouseLeave={e => {
-                      if (!isActive) {
-                        e.currentTarget.style.background = 'transparent';
-                        e.currentTarget.style.color = 'rgba(255,255,255,0.6)';
-                      }
-                    }}
+                    onMouseEnter={e => { if (!isActive) { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = 'rgba(255,255,255,0.9)'; } }}
+                    onMouseLeave={e => { if (!isActive) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.6)'; } }}
                   >
-                    {isActive && (
-                      <div 
-                        className="w-1.5 h-1.5 rounded-full"
-                        style={{ background: color, boxShadow: `0 0 6px ${color}` }}
-                      />
-                    )}
-                    <span style={{ marginLeft: isActive ? 0 : '14px' }}>
-                      {WIDGET_LABELS[widget.id]}
-                    </span>
+                    {isActive && <div className="w-1.5 h-1.5 rounded-full" style={{ background: color, boxShadow: `0 0 6px ${color}` }} />}
+                    <span style={{ marginLeft: isActive ? 0 : '14px' }}>{WIDGET_LABELS[widget.id]}</span>
                   </button>
                 );
               })}
@@ -1040,15 +919,13 @@ function WidgetShell({ widgetId, title, color, widgets, onReplace, children }: {
   );
 }
 
+/* ── Individual Widget Renderers ── */
+
 function WidgetStat({ label, value, color }: { label: string; value: string; color: string }) {
   return (
-    <div 
-      className="rounded-lg p-2.5 transition-all duration-200 hover:scale-[1.02]" 
-      style={{ 
-        background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)', 
-        border: '1px solid rgba(255,255,255,0.06)',
-        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)'
-      }}
+    <div
+      className="rounded-lg p-2.5 transition-all duration-200 hover:scale-[1.02]"
+      style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)', border: '1px solid rgba(255,255,255,0.06)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)' }}
     >
       <div className="text-[9px] tracking-[0.12em] uppercase mb-1" style={{ color: 'rgba(255,255,255,0.35)' }}>{label}</div>
       <div className="text-sm font-black tabular-nums truncate" style={{ color, textShadow: `0 0 20px ${color}30` }}>{value}</div>
@@ -1056,31 +933,225 @@ function WidgetStat({ label, value, color }: { label: string; value: string; col
   );
 }
 
-function MissionComplete({ rankColor, rank }: { rankColor: string; rank: string }) {
+function DailyProgressWidget({ state, completedTasks, totalTasks, completionPercent, onStartFocus }: {
+  state: AppState; completedTasks: number; totalTasks: number; completionPercent: number; onStartFocus: () => void;
+}) {
+  const currentRank = getRank(completionPercent);
+  const isComplete = completedTasks === totalTasks && totalTasks > 0;
+  const focusMinutes = Math.floor(state.focusTotalMs / 60000);
+  const remainingTasks = Math.max(totalTasks - completedTasks, 0);
+
   return (
-    <div
-      className="rounded-lg p-6 text-center"
-      style={{
-        background: `linear-gradient(135deg, ${rankColor}15 0%, ${rankColor}08 100%)`,
-        border: `1px solid ${rankColor}44`,
-        boxShadow: `0 0 30px ${rankColor}22`,
-      }}
-    >
-      <div
-        className="text-5xl font-black mb-2"
-        style={{ color: rankColor, textShadow: `0 0 30px ${rankColor}, 0 0 60px ${rankColor}66` }}
-      >
-        {rank}
+    <div className="space-y-4">
+      {/* Rank + progress bar */}
+      <div className="flex items-center gap-4">
+        <div className="shrink-0 text-center" style={{ minWidth: 64 }}>
+          <div className="text-3xl font-black" style={{ color: currentRank.color, textShadow: `0 0 20px ${currentRank.color}66` }}>
+            {currentRank.rank}
+          </div>
+          <div className="text-[9px] tracking-widest" style={{ color: 'rgba(255,255,255,0.3)' }}>RANK</div>
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10px] font-bold tracking-widest" style={{ color: isComplete ? '#33ffcc' : 'rgba(255,255,255,0.35)' }}>
+              {isComplete ? 'MISSION COMPLETE' : 'DAILY MISSION'}
+            </span>
+            <span className="text-xs font-black tabular-nums" style={{ color: currentRank.color }}>
+              {Math.round(completionPercent)}%
+            </span>
+          </div>
+          <div className="h-2.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+            <div
+              className="h-full rounded-full transition-all duration-500"
+              style={{
+                width: `${completionPercent}%`,
+                background: isComplete
+                  ? 'linear-gradient(90deg, #33ffcc, #00e0ff)'
+                  : 'linear-gradient(90deg, #00e0ff, #33ffcc)',
+                boxShadow: isComplete
+                  ? '0 0 16px rgba(51,255,204,0.7), 0 0 32px rgba(51,255,204,0.3)'
+                  : '0 0 12px rgba(0,224,255,0.7)',
+              }}
+            />
+          </div>
+        </div>
       </div>
-      <div className="font-bold text-lg tracking-widest mb-1" style={{ color: '#ffffff' }}>
-        MISSION COMPLETE
+
+      {/* Stats row */}
+      <div className="grid grid-cols-4 gap-2">
+        <WidgetStat label="DONE" value={`${completedTasks}/${totalTasks}`} color="#33ffcc" />
+        <WidgetStat label="LEFT" value={remainingTasks.toString()} color="#ffcc00" />
+        <WidgetStat label="XP" value={state.totalPointsToday.toLocaleString()} color="#ff2ed1" />
+        <WidgetStat label="FOCUS" value={`${focusMinutes}m`} color="#cc44ff" />
       </div>
-      <div className="text-sm" style={{ color: 'rgba(255,255,255,0.4)' }}>
-        All quotas fulfilled for today
+
+      {/* Complete banner */}
+      {isComplete && (
+        <div
+          className="rounded-lg p-3 text-center"
+          style={{
+            background: `linear-gradient(135deg, ${currentRank.color}15 0%, ${currentRank.color}08 100%)`,
+            border: `1px solid ${currentRank.color}44`,
+            boxShadow: `0 0 20px ${currentRank.color}22`,
+          }}
+        >
+          <div className="text-2xl font-black mb-1" style={{ color: currentRank.color, textShadow: `0 0 20px ${currentRank.color}, 0 0 40px ${currentRank.color}44` }}>
+            {currentRank.rank}
+          </div>
+          <div className="text-xs font-bold tracking-widest" style={{ color: '#ffffff' }}>MISSION COMPLETE</div>
+          <div className="text-[10px]" style={{ color: 'rgba(255,255,255,0.35)' }}>All quotas fulfilled for today</div>
+        </div>
+      )}
+
+      {/* Quick actions */}
+      {!isComplete && (
+        <div className="flex gap-2">
+          <button
+            onClick={onStartFocus}
+            className="flex-1 py-2 rounded text-[10px] font-bold tracking-widest transition-all duration-200 hover:brightness-125"
+            style={{ background: 'rgba(204,68,255,0.12)', border: '1px solid rgba(204,68,255,0.3)', color: '#cc44ff' }}
+          >
+            FOCUS
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TelemetryWidget({ state, completedTasks, totalTasks, completionPercent }: {
+  state: AppState; completedTasks: number; totalTasks: number; completionPercent: number;
+}) {
+  const remainingTasks = Math.max(totalTasks - completedTasks, 0);
+  return (
+    <div>
+      <div className="grid grid-cols-2 gap-2">
+        <WidgetStat label="DONE" value={`${completedTasks}/${totalTasks}`} color="#33ffcc" />
+        <WidgetStat label="LEFT" value={remainingTasks.toString()} color="#ffcc00" />
+        <WidgetStat label="XP" value={state.totalPointsToday.toLocaleString()} color="#ff2ed1" />
+        <WidgetStat label="BEST COMBO" value={`x${Math.floor(state.combo.peakToday).toLocaleString()}`} color="#ff8800" />
+      </div>
+      <div className="mt-3 h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+        <div className="h-full rounded-full" style={{ width: `${completionPercent}%`, background: 'linear-gradient(90deg, #00e0ff, #33ffcc)', boxShadow: '0 0 12px rgba(0,224,255,0.7)' }} />
       </div>
     </div>
   );
 }
+
+function TargetsWidget({ state }: { state: AppState }) {
+  const nextTasks = state.tasks.filter(t => (state.progress[t.id] ?? 0) < t.dailyTarget).slice(0, 4);
+  return (
+    <div className="space-y-2">
+      {nextTasks.length === 0 ? (
+        <div className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>All task quotas are complete.</div>
+      ) : nextTasks.map(task => {
+        const done = state.progress[task.id] ?? 0;
+        return (
+          <div key={task.id} className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-xs font-bold truncate" style={{ color: task.color }}>{task.name.toUpperCase()}</div>
+              <div className="text-[10px]" style={{ color: 'rgba(255,255,255,0.28)' }}>{task.category}</div>
+            </div>
+            <div className="text-xs font-black tabular-nums" style={{ color: '#ffffff' }}>{done}/{task.dailyTarget}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function FocusWidget({ state, onStartFocus }: { state: AppState; onStartFocus: () => void }) {
+  const focusMinutes = Math.floor(state.focusTotalMs / 60000);
+  const focusHours = (state.focusTotalMs / 3600000).toFixed(1);
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div>
+        <div className="text-2xl font-black" style={{ color: '#cc44ff', textShadow: '0 0 14px rgba(204,68,255,0.5)' }}>{focusMinutes}m</div>
+        <div className="text-[10px] tracking-widest" style={{ color: 'rgba(255,255,255,0.35)' }}>{focusHours}h TOTAL</div>
+      </div>
+      <button onClick={onStartFocus} className="px-3 py-2 rounded text-[10px] font-bold tracking-widest" style={{ background: 'rgba(204,68,255,0.12)', border: '1px solid rgba(204,68,255,0.35)', color: '#cc44ff' }}>
+        START
+      </button>
+    </div>
+  );
+}
+
+function UnlocksWidget({ state }: { state: AppState }) {
+  const latest = state.achievements.filter(a => a.unlockedAt !== null).sort((a, b) => (b.unlockedAt ?? 0) - (a.unlockedAt ?? 0)).slice(0, 3);
+  const totalUnlocked = state.achievements.filter(a => a.unlockedAt !== null).length;
+  return (
+    <div className="space-y-2">
+      {latest.length === 0 ? (
+        <div className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>No achievements unlocked yet.</div>
+      ) : latest.map(a => (
+        <div key={a.id} className="text-xs font-bold truncate" style={{ color: a.color }}>{a.name.toUpperCase()}</div>
+      ))}
+      <div className="text-[10px] pt-1" style={{ color: 'rgba(255,255,255,0.25)' }}>{totalUnlocked}/{state.achievements.length} UNLOCKED</div>
+    </div>
+  );
+}
+
+function StreakWidget({ state }: { state: AppState }) {
+  const sssDays = Object.values(state.calendar).filter(d => d.tasksCompleted > 0 && d.totalTasks > 0 && (d.tasksCompleted / d.totalTasks) * 100 >= 100).length;
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      <WidgetStat label="DAILY STREAK" value={`${state.streak.dailyStreak}`} color="#ff8800" />
+      <WidgetStat label="SSS STREAK" value={`${state.streak.sssStreak}`} color="#ff2ed1" />
+      <WidgetStat label="SSS DAYS" value={`${sssDays}`} color="#ffcc00" />
+      <WidgetStat label="REDEEMABLES" value={`${state.redeemables.length}`} color="#33ffcc" />
+    </div>
+  );
+}
+
+function EconomyWidget({ state }: { state: AppState }) {
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      <WidgetStat label="BALANCE" value={state.money.toLocaleString()} color="#ffcc00" />
+      <WidgetStat label="EARNED" value={state.totalMoneyEarned.toLocaleString()} color="#33ffcc" />
+      <WidgetStat label="SPENT" value={state.totalMoneySpent.toLocaleString()} color="#ff8800" />
+      <WidgetStat label="TASKS DONE" value={`${state.totalTasksCompleted}`} color="#00e0ff" />
+    </div>
+  );
+}
+
+function ResourcesWidget({ state }: { state: AppState }) {
+  const topResources = Object.entries(state.resources)
+    .filter(([_, v]) => v > 0)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4);
+  return (
+    <div className="space-y-1.5">
+      {topResources.length === 0 ? (
+        <div className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>No resources collected yet.</div>
+      ) : topResources.map(([id, amount]) => {
+        const def = RESOURCE_DEFS.find(r => r.id === id);
+        return (
+          <div key={id} className="flex items-center justify-between">
+            <span className="text-xs" style={{ color: def?.color ?? '#ffffff' }}>{def?.icon} {def?.name ?? id}</span>
+            <span className="text-xs font-black tabular-nums" style={{ color: def?.color ?? '#ffffff' }}>{amount}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function TimelineWidget({ state }: { state: AppState }) {
+  const recent = state.timeline.slice(-4).reverse();
+  return (
+    <div className="space-y-2">
+      {recent.length === 0 ? (
+        <div className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>No activity yet today.</div>
+      ) : recent.map(entry => (
+        <div key={entry.id} className="flex items-center justify-between">
+          <span className="text-xs font-bold truncate" style={{ color: entry.taskColor }}>{entry.taskName.toUpperCase()}</span>
+          <span className="text-[10px] font-black tabular-nums" style={{ color: '#ffffff' }}>+{entry.pointsEarned}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 
 function SortBtn({ active, label, onClick, asc, showArrow }: { active: boolean; label: string; onClick: () => void; asc: boolean; showArrow: boolean }) {
   return (

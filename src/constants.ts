@@ -1,4 +1,4 @@
-import type { RankThreshold, TaskDefinition, ResourceDef, StoreReward, Achievement, AppSettings, StreakData, CategoryDefinition, DashboardWidgetConfig, StoreCategoryDefinition } from './types';
+import type { RankThreshold, TaskDefinition, ResourceDef, StoreReward, Achievement, AppSettings, StreakData, CategoryDefinition, DashboardWidgetConfig, DashboardWidgetId, StoreCategoryDefinition, WidgetSize } from './types';
 
 export const COMBO_WINDOW_MS = 60 * 60 * 1000;
 
@@ -220,11 +220,28 @@ export const DEFAULT_CATEGORIES: CategoryDefinition[] = [
 
 export const DEFAULT_TASK_COLOR_PRESETS = ['#00e0ff', '#ff2ed1', '#ffcc00', '#33ffcc', '#ff8800', '#cc44ff', '#4488ff', '#33ff99'];
 
+export const WIDGET_SIZES: Record<DashboardWidgetId, WidgetSize> = {
+  daily_progress: 'big',
+  telemetry: 'normal',
+  targets: 'normal',
+  focus: 'normal',
+  unlocks: 'normal',
+  streak: 'normal',
+  economy: 'normal',
+  resources: 'normal',
+  timeline: 'normal',
+};
+
 export const DEFAULT_DASHBOARD_WIDGETS: DashboardWidgetConfig[] = [
+  { id: 'daily_progress', enabled: true },
   { id: 'telemetry', enabled: true },
   { id: 'targets', enabled: true },
   { id: 'focus', enabled: true },
   { id: 'unlocks', enabled: true },
+  { id: 'streak', enabled: false },
+  { id: 'economy', enabled: false },
+  { id: 'resources', enabled: false },
+  { id: 'timeline', enabled: false },
 ];
 
 export const DEFAULT_STORE_CATEGORIES: StoreCategoryDefinition[] = [

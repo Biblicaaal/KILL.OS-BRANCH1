@@ -78,7 +78,11 @@ export interface CategoryDefinition {
   color: string;
 }
 
-export type DashboardWidgetId = 'telemetry' | 'targets' | 'focus' | 'unlocks';
+export type DashboardWidgetId =
+  | 'daily_progress' | 'telemetry' | 'targets' | 'focus' | 'unlocks'
+  | 'streak' | 'economy' | 'resources' | 'timeline';
+
+export type WidgetSize = 'big' | 'normal';
 
 export interface DashboardWidgetConfig {
   id: DashboardWidgetId;
