@@ -480,7 +480,7 @@ function ComboWidget({ multiplier, comboTimeLeft, comboWindowMs }: ComboWidgetPr
 
   return (
     <div
-      className="rounded-lg flex items-center justify-between flex-1"
+      className="rounded-lg flex items-center justify-between shrink-0"
       style={{
         background: isActive
           ? `linear-gradient(135deg, rgba(255,204,0,${0.06 + intensity * 0.08}) 0%, rgba(255,136,0,${0.03 + intensity * 0.05}) 50%, rgba(255,46,209,${intensity * 0.04}) 100%)`
