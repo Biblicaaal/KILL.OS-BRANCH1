@@ -30,7 +30,52 @@ body {
   display: grid;
   grid-template-columns: minmax(min(100%, 760px), 1.55fr) minmax(var(--panel-min), 0.85fr);
   gap: clamp(18px, 2vw, 32px);
-  align-items: start;
+  align-items: stretch;
+  height: 100%;
+  overflow: hidden;
+}
+
+.dashboard-tasks-column {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.task-sort-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 8px 0;
+  flex-shrink: 0;
+}
+
+.task-scroll-area {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+}
+
+.task-scroll-area::-webkit-scrollbar {
+  width: 4px;
+}
+
+.task-scroll-area::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.task-scroll-area::-webkit-scrollbar-thumb {
+  background: rgba(0, 224, 255, 0.2);
+  border-radius: 2px;
+}
+
+.task-scroll-area::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 224, 255, 0.4);
 }
 
 .task-grid {
@@ -44,18 +89,27 @@ body {
   flex-direction: column;
   gap: clamp(12px, 1.4vw, 18px);
   align-self: start;
-  position: sticky;
-  top: 64px;
+  overflow-y: auto;
+  max-height: 100%;
+}
+
+.dashboard-widgets::-webkit-scrollbar {
+  width: 4px;
+}
+
+.dashboard-widgets::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dashboard-widgets::-webkit-scrollbar-thumb {
+  background: rgba(0, 224, 255, 0.15);
+  border-radius: 2px;
 }
 
 .widget-normal-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: clamp(12px, 1.4vw, 18px);
-}
-
-.widget-big {
-  /* Big widgets take full width of the parent */
 }
 
 @media (min-width: 1500px) {
@@ -67,11 +121,24 @@ body {
 @media (max-width: 1180px) {
   .dashboard-layout {
     grid-template-columns: 1fr;
+    height: auto;
+    overflow: visible;
+  }
+
+  .dashboard-tasks-column {
+    height: auto;
+    overflow: visible;
+  }
+
+  .task-scroll-area {
+    overflow: visible;
+    flex: none;
   }
 
   .dashboard-widgets {
-    position: static;
     order: -1;
+    max-height: none;
+    overflow: visible;
   }
 }
 

@@ -110,15 +110,15 @@ export default function App() {
       case 'dashboard':
         return (
           <div className="dashboard-layout">
-            <div className="space-y-5 min-w-0">
+            <div className="dashboard-tasks-column">
             <ComboWidget
               multiplier={state.combo.multiplier}
               comboTimeLeft={comboTimeLeft}
               comboWindowMs={state.combo.comboWindowMs}
             />
 
-            {/* Sort & Group controls */}
-            <div className="flex items-center gap-2 flex-wrap">
+            {/* Sort & Group controls - sticky */}
+            <div className="task-sort-bar">
               <SortBtn active={sortBy === 'name'} label="Name" onClick={() => { setSortBy('name'); if (sortBy === 'name') setSortAsc(a => !a); else setSortAsc(true); }} asc={sortAsc} showArrow={sortBy === 'name'} />
               <SortBtn active={sortBy === 'target'} label="Quota" onClick={() => { setSortBy('target'); if (sortBy === 'target') setSortAsc(a => !a); else setSortAsc(true); }} asc={sortAsc} showArrow={sortBy === 'target'} />
               <SortBtn active={sortBy === 'completed'} label="Done" onClick={() => { setSortBy('completed'); if (sortBy === 'completed') setSortAsc(a => !a); else setSortAsc(true); }} asc={sortAsc} showArrow={sortBy === 'completed'} />
@@ -130,72 +130,74 @@ export default function App() {
               <GroupBtn active={groupMode === 'status'} label="By Status" onClick={() => setGroupMode('status')} />
             </div>
 
-            {/* Task groups */}
-            {[...groupedTasks.entries()].map(([groupKey, tasks]) => {
-              const isCollapsed = collapsedGroups.has(groupKey);
-              const catColor = state.categories.find(c => c.name === groupKey)?.color ?? '#ffffff';
-              const isGroup = groupMode !== 'none';
+            {/* Scrollable task area */}
+            <div className="task-scroll-area">
+              {[...groupedTasks.entries()].map(([groupKey, tasks]) => {
+                const isCollapsed = collapsedGroups.has(groupKey);
+                const catColor = state.categories.find(c => c.name === groupKey)?.color ?? '#ffffff';
+                const isGroup = groupMode !== 'none';
 
-              return (
-                <div key={groupKey}>
-                  {isGroup && (
-                    <button
-                      onClick={() => toggleGroup(groupKey)}
-                      className="w-full flex items-center gap-2 mb-3 py-1 group"
-                    >
-                      <span
-                        className="text-xs transition-transform duration-200"
-                        style={{
-                          color: catColor,
-                          transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
-                          display: 'inline-block',
-                        }}
+                return (
+                  <div key={groupKey}>
+                    {isGroup && (
+                      <button
+                        onClick={() => toggleGroup(groupKey)}
+                        className="w-full flex items-center gap-2 mb-3 py-1 group"
                       >
-                        ▾
-                      </span>
-                      <span className="text-xs font-bold tracking-widest" style={{ color: catColor }}>
-                        {groupKey.toUpperCase()}
-                      </span>
-                      <span className="text-[10px] tabular-nums" style={{ color: 'rgba(255,255,255,0.25)' }}>
-                        ({tasks.length})
-                      </span>
-                      <div className="flex-1 h-px" style={{ background: `${catColor}20` }} />
-                    </button>
-                  )}
-                  {!isCollapsed && (
-                    <div className="task-grid mb-2">
-                      {tasks.map(task => (
-                        <TaskCard
-                          key={task.id}
-                          task={task}
-                          completed={state.progress[task.id] ?? 0}
-                          comboMultiplier={state.combo.multiplier}
-                          categoryColor={state.categories.find(c => c.name === task.category)?.color ?? task.color}
-                          onComplete={completeTask}
-                          onEdit={t => setTaskModal(t)}
-                          onDelete={removeTask}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                        <span
+                          className="text-xs transition-transform duration-200"
+                          style={{
+                            color: catColor,
+                            transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
+                            display: 'inline-block',
+                          }}
+                        >
+                          ▾
+                        </span>
+                        <span className="text-xs font-bold tracking-widest" style={{ color: catColor }}>
+                          {groupKey.toUpperCase()}
+                        </span>
+                        <span className="text-[10px] tabular-nums" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                          ({tasks.length})
+                        </span>
+                        <div className="flex-1 h-px" style={{ background: `${catColor}20` }} />
+                      </button>
+                    )}
+                    {!isCollapsed && (
+                      <div className="task-grid mb-2">
+                        {tasks.map(task => (
+                          <TaskCard
+                            key={task.id}
+                            task={task}
+                            completed={state.progress[task.id] ?? 0}
+                            comboMultiplier={state.combo.multiplier}
+                            categoryColor={state.categories.find(c => c.name === task.category)?.color ?? task.color}
+                            onComplete={completeTask}
+                            onEdit={t => setTaskModal(t)}
+                            onDelete={removeTask}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
 
-            {/* Add task card */}
-            <button
-              onClick={() => setTaskModal('new')}
-              className="rounded-lg p-6 flex flex-col items-center justify-center gap-2 transition-all duration-200 w-full"
-              style={{
-                background: 'rgba(255,255,255,0.02)',
-                border: '1px dashed rgba(255,255,255,0.1)',
-                color: 'rgba(255,255,255,0.2)',
-                minHeight: 80,
-              }}
-            >
-              <span className="text-2xl">+</span>
-              <span className="text-xs font-bold tracking-widest">ADD TASK</span>
-            </button>
+              {/* Add task card */}
+              <button
+                onClick={() => setTaskModal('new')}
+                className="rounded-lg p-6 flex flex-col items-center justify-center gap-2 transition-all duration-200 w-full"
+                style={{
+                  background: 'rgba(255,255,255,0.02)',
+                  border: '1px dashed rgba(255,255,255,0.1)',
+                  color: 'rgba(255,255,255,0.2)',
+                  minHeight: 80,
+                }}
+              >
+                <span className="text-2xl">+</span>
+                <span className="text-xs font-bold tracking-widest">ADD TASK</span>
+              </button>
+            </div>
             </div>
 
             <DashboardWidgets
@@ -359,10 +361,17 @@ export default function App() {
           paddingTop: TOP_BAR_HEIGHT,
           paddingBottom: FOOTER_HEIGHT + 20,
           transition: 'margin-left 0.3s',
-          minHeight: '100vh',
+          height: '100vh',
+          overflow: activeTab === 'dashboard' ? 'hidden' : 'auto',
         }}
       >
-        <div className="app-content">
+        <div
+          className="app-content"
+          style={{
+            height: activeTab === 'dashboard' ? '100%' : 'auto',
+            overflow: activeTab === 'dashboard' ? 'hidden' : 'visible',
+          }}
+        >
           {/* Header */}
           <div className="mb-8">
             <div
@@ -792,11 +801,11 @@ function DashboardWidgets({ state, completedTasks, totalTasks, completionPercent
     );
   };
 
-  // Layout: big widget at top (spanning full width / 2 cols), then normal widgets in 2-col grid
+  // Layout: big widget locked at top (non-draggable), then normal widgets in 2-col grid
   return (
     <aside className="dashboard-widgets">
-      {/* Big widget slot */}
-      {bigWidget && renderDraggableWidget(bigWidget)}
+      {/* Big widget slot - locked, not draggable */}
+      {bigWidget && renderWidget(bigWidget.id)}
 
       {/* Normal widget grid */}
       {normalWidgets.length > 0 && (
@@ -853,16 +862,19 @@ function WidgetShell({ widgetId, title, color, widgets, onReplace, size, childre
     >
       <div className="flex items-center justify-between gap-3 mb-3">
         <div className="flex items-center gap-2.5">
-          <div className="flex flex-col gap-[3px] opacity-25 group-hover:opacity-50 transition-opacity duration-300" style={{ cursor: 'grab' }}>
-            <div className="flex gap-[3px]"><div className="w-1 h-1 rounded-full" style={{ background: color }} /><div className="w-1 h-1 rounded-full" style={{ background: color }} /></div>
-            <div className="flex gap-[3px]"><div className="w-1 h-1 rounded-full" style={{ background: color }} /><div className="w-1 h-1 rounded-full" style={{ background: color }} /></div>
-            <div className="flex gap-[3px]"><div className="w-1 h-1 rounded-full" style={{ background: color }} /><div className="w-1 h-1 rounded-full" style={{ background: color }} /></div>
-          </div>
+          {size !== 'big' && (
+            <div className="flex flex-col gap-[3px] opacity-25 group-hover:opacity-50 transition-opacity duration-300" style={{ cursor: 'grab' }}>
+              <div className="flex gap-[3px]"><div className="w-1 h-1 rounded-full" style={{ background: color }} /><div className="w-1 h-1 rounded-full" style={{ background: color }} /></div>
+              <div className="flex gap-[3px]"><div className="w-1 h-1 rounded-full" style={{ background: color }} /><div className="w-1 h-1 rounded-full" style={{ background: color }} /></div>
+              <div className="flex gap-[3px]"><div className="w-1 h-1 rounded-full" style={{ background: color }} /><div className="w-1 h-1 rounded-full" style={{ background: color }} /></div>
+            </div>
+          )}
           <div className="text-[10px] font-semibold tracking-[0.15em] uppercase" style={{ color, textShadow: `0 0 20px ${color}40` }}>
             {title}
           </div>
         </div>
 
+        {sameSizeWidgets.length > 1 && (
         <div ref={dropdownRef} className="relative">
           <button
             onClick={() => setDropdownOpen(!dropdownOpen)}
@@ -913,6 +925,7 @@ function WidgetShell({ widgetId, title, color, widgets, onReplace, size, childre
             </div>
           )}
         </div>
+        )}
       </div>
       {children}
     </section>
