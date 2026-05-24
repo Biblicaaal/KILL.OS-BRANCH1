@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import type { AppState, TimelineEntry, ResourceAmount, TaskDefinition, StoreReward, InsightPlatform, InsightEntry, Achievement, CalendarDay, DaySummary, Notification, FocusSession, Redeemable, CategoryDefinition, DashboardWidgetConfig } from '../types';
-import { DEFAULT_TASKS, DEFAULT_REWARDS, DEFAULT_ACHIEVEMENTS, DEFAULT_SETTINGS, DEFAULT_STREAK, DEFAULT_CATEGORIES, DEFAULT_TASK_COLOR_PRESETS, DEFAULT_DASHBOARD_WIDGETS, RANK_MONEY_REWARD, COMBO_STEP, getRank, RESOURCE_DEFS } from '../constants';
+import type { AppState, TimelineEntry, ResourceAmount, TaskDefinition, StoreReward, InsightPlatform, InsightEntry, Achievement, CalendarDay, DaySummary, Notification, FocusSession, Redeemable, CategoryDefinition, DashboardWidgetConfig, StoreCategoryDefinition } from '../types';
+import { DEFAULT_TASKS, DEFAULT_REWARDS, DEFAULT_ACHIEVEMENTS, DEFAULT_SETTINGS, DEFAULT_STREAK, DEFAULT_CATEGORIES, DEFAULT_TASK_COLOR_PRESETS, DEFAULT_DASHBOARD_WIDGETS, DEFAULT_STORE_CATEGORIES, RANK_MONEY_REWARD, COMBO_STEP, getRank, RESOURCE_DEFS } from '../constants';
 import { playTaskComplete, playComboIncrease, playRankUp, playPurchase, playAchievement, playFocusComplete, playRedeem } from './useSounds';
 import { useAutoSave, loadStateFromCloud } from './useAutoSave';
 
@@ -311,6 +311,7 @@ function hydrateFromPersisted(p: any): AppState {
   return {
     tasks: p.tasks ?? DEFAULT_TASKS,
     categories: savedCategories.length > 0 ? [...savedCategories, ...extraCategories] : [...DEFAULT_CATEGORIES, ...extraCategories],
+    storeCategories: Array.isArray(p.storeCategories) && p.storeCategories.length > 0 ? p.storeCategories : [...DEFAULT_STORE_CATEGORIES],
     taskColorPresets: Array.isArray(p.taskColorPresets) && p.taskColorPresets.length > 0 ? p.taskColorPresets : DEFAULT_TASK_COLOR_PRESETS,
     dashboardWidgets,
     progress: p.progress ?? {},
@@ -720,6 +721,31 @@ export function useAppState() {
     });
   }, []);
 
+  const addStoreCategory = useCallback((category: StoreCategoryDefinition) => {
+    setState(prev => ({ ...prev, storeCategories: [...prev.storeCategories, category] }));
+  }, []);
+
+  const updateStoreCategory = useCallback((category: StoreCategoryDefinition) => {
+    setState(prev => ({
+      ...prev,
+      storeCategories: prev.storeCategories.map(c => c.id === category.id ? category : c),
+      rewards: prev.rewards.map(r => r.category === prev.storeCategories.find(c => c.id === category.id)?.name ? { ...r, category: category.name } : r),
+    }));
+  }, []);
+
+  const removeStoreCategory = useCallback((categoryId: string) => {
+    setState(prev => {
+      const cat = prev.storeCategories.find(c => c.id === categoryId);
+      if (!cat) return prev;
+      const fallback = prev.storeCategories.find(c => c.id !== categoryId) ?? prev.storeCategories[0];
+      return {
+        ...prev,
+        storeCategories: prev.storeCategories.filter(c => c.id !== categoryId),
+        rewards: prev.rewards.map(r => r.category === cat.name ? { ...r, category: fallback?.name ?? 'Custom' } : r),
+      };
+    });
+  }, []);
+
   const addTaskColorPreset = useCallback((color: string) => {
     setState(prev => {
       if (prev.taskColorPresets.some(c => c.toLowerCase() === color.toLowerCase())) return prev;
@@ -887,6 +913,7 @@ export function useAppState() {
     redeemItem,
     addTask, removeTask, updateTask,
     addCategory, updateCategory, removeCategory,
+    addStoreCategory, updateStoreCategory, removeStoreCategory,
     addTaskColorPreset, removeTaskColorPreset,
     updateDashboardWidgets,
     addPlatform, removePlatform, addInsightEntry,

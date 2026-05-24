@@ -1,4 +1,4 @@
-import type { RankThreshold, TaskDefinition, ResourceDef, StoreReward, Achievement, AppSettings, StreakData, CategoryDefinition, DashboardWidgetConfig } from './types';
+import type { RankThreshold, TaskDefinition, ResourceDef, StoreReward, Achievement, AppSettings, StreakData, CategoryDefinition, DashboardWidgetConfig, StoreCategoryDefinition } from './types';
 
 export const COMBO_WINDOW_MS = 60 * 60 * 1000;
 
@@ -51,11 +51,11 @@ export const DEFAULT_TASKS: TaskDefinition[] = [
 ];
 
 export const DEFAULT_REWARDS: StoreReward[] = [
-  { id: 'gaming_1h', name: '1 Hour Gaming', description: 'Enjoy a gaming session', cost: 500, resources: [{ resourceId: 'neon_shard', amount: 5 }, { resourceId: 'alloy_core', amount: 2 }], cooldownMs: 3600000, category: 'Leisure', custom: false },
-  { id: 'movie', name: 'Watch Movie', description: 'Relax with a movie', cost: 300, resources: [{ resourceId: 'pulse_crystal', amount: 3 }], cooldownMs: 7200000, category: 'Leisure', custom: false },
-  { id: 'go_out', name: 'Go Out', description: 'Take a break outside', cost: 800, resources: [{ resourceId: 'synthetic_fiber', amount: 3 }, { resourceId: 'void_fragment', amount: 2 }], cooldownMs: 0, category: 'Social', custom: false },
-  { id: 'snack', name: 'Snack Break', description: 'Grab a treat', cost: 150, resources: [], cooldownMs: 1800000, category: 'Leisure', custom: false },
-  { id: 'craft_special', name: 'Special Crafting', description: 'Unlock a special reward', cost: 2000, resources: [{ resourceId: 'orichalcum', amount: 3 }, { resourceId: 'titanium', amount: 2 }, { resourceId: 'quantum_alloy', amount: 1 }], cooldownMs: 0, category: 'Premium', custom: false },
+  { id: 'gaming_1h', name: '1 Hour Gaming', description: 'Enjoy a gaming session', cost: 500, resources: [{ resourceId: 'neon_shard', amount: 5 }, { resourceId: 'alloy_core', amount: 2 }], cooldownMs: 3600000, category: 'Leisure', icon: 'gamepad-2', custom: false },
+  { id: 'movie', name: 'Watch Movie', description: 'Relax with a movie', cost: 300, resources: [{ resourceId: 'pulse_crystal', amount: 3 }], cooldownMs: 7200000, category: 'Leisure', icon: 'film', custom: false },
+  { id: 'go_out', name: 'Go Out', description: 'Take a break outside', cost: 800, resources: [{ resourceId: 'synthetic_fiber', amount: 3 }, { resourceId: 'void_fragment', amount: 2 }], cooldownMs: 0, category: 'Social', icon: 'map-pin', custom: false },
+  { id: 'snack', name: 'Snack Break', description: 'Grab a treat', cost: 150, resources: [], cooldownMs: 1800000, category: 'Leisure', icon: 'coffee', custom: false },
+  { id: 'craft_special', name: 'Special Crafting', description: 'Unlock a special reward', cost: 2000, resources: [{ resourceId: 'orichalcum', amount: 3 }, { resourceId: 'titanium', amount: 2 }, { resourceId: 'quantum_alloy', amount: 1 }], cooldownMs: 0, category: 'Premium', icon: 'sparkles', custom: false },
 ];
 
 function a(id: string, name: string, description: string, icon: string, color: string, category: string, condition: Achievement['condition'], progressTarget?: number): Achievement {
@@ -226,6 +226,22 @@ export const DEFAULT_DASHBOARD_WIDGETS: DashboardWidgetConfig[] = [
   { id: 'focus', enabled: true },
   { id: 'unlocks', enabled: true },
 ];
+
+export const DEFAULT_STORE_CATEGORIES: StoreCategoryDefinition[] = [
+  { id: 'leisure', name: 'Leisure', color: '#00e0ff' },
+  { id: 'social', name: 'Social', color: '#ffcc00' },
+  { id: 'premium', name: 'Premium', color: '#ff2ed1' },
+  { id: 'custom', name: 'Custom', color: '#4488ff' },
+];
+
+export const STORE_ICONS = [
+  'gamepad-2', 'film', 'music', 'coffee', 'utensils', 'book-open',
+  'dumbbell', 'map-pin', 'shopping-bag', 'gift', 'heart', 'star',
+  'zap', 'flame', 'rocket', 'trophy', 'sparkles', 'smile',
+  'camera', 'palette', 'globe', 'car', 'home', 'eye',
+  'message-circle', 'video', 'briefcase', 'terminal', 'cpu',
+  'shield', 'target', 'crown',
+] as const;
 
 export const TASK_CATEGORIES = DEFAULT_CATEGORIES.map(c => c.name);
 

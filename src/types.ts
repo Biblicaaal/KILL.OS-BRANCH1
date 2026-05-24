@@ -62,7 +62,14 @@ export interface StoreReward {
   resources: ResourceAmount[];
   cooldownMs: number;
   category: string;
+  icon: string;
   custom: boolean;
+}
+
+export interface StoreCategoryDefinition {
+  id: string;
+  name: string;
+  color: string;
 }
 
 export interface CategoryDefinition {
@@ -185,6 +192,7 @@ export interface Notification {
 export interface AppState {
   tasks: TaskDefinition[];
   categories: CategoryDefinition[];
+  storeCategories: StoreCategoryDefinition[];
   taskColorPresets: string[];
   dashboardWidgets: DashboardWidgetConfig[];
   progress: Record<string, number>;

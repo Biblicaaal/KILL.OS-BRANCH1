@@ -48,6 +48,7 @@ export default function App() {
     redeemItem,
     addTask, removeTask, updateTask,
     addCategory, updateCategory, removeCategory,
+    addStoreCategory, updateStoreCategory, removeStoreCategory,
     addTaskColorPreset, removeTaskColorPreset,
     updateDashboardWidgets,
     addPlatform, removePlatform, addInsightEntry,
@@ -236,6 +237,10 @@ export default function App() {
             onUpdateReward={updateReward}
             redeemables={state.redeemables}
             onRedeem={redeemItem}
+            storeCategories={state.storeCategories}
+            onAddStoreCategory={addStoreCategory}
+            onRemoveStoreCategory={removeStoreCategory}
+            onUpdateStoreCategory={updateStoreCategory}
           />
         );
       case 'calendar':
