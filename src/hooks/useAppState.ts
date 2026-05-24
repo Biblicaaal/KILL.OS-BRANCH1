@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import type { AppState, TimelineEntry, ResourceAmount, TaskDefinition, StoreReward, InsightPlatform, InsightEntry, Achievement, CalendarDay, DaySummary, Notification, FocusSession, Redeemable, CategoryDefinition, DashboardWidgetConfig } from '../types';
 import { DEFAULT_TASKS, DEFAULT_REWARDS, DEFAULT_ACHIEVEMENTS, DEFAULT_SETTINGS, DEFAULT_STREAK, DEFAULT_CATEGORIES, DEFAULT_TASK_COLOR_PRESETS, DEFAULT_DASHBOARD_WIDGETS, RANK_MONEY_REWARD, COMBO_STEP, getRank, RESOURCE_DEFS } from '../constants';
 import { playTaskComplete, playComboIncrease, playRankUp, playPurchase, playAchievement, playFocusComplete, playRedeem } from './useSounds';
+import { useAutoSave, loadStateFromCloud } from './useAutoSave';
 
 function getTodayKey(): string {
   return new Date().toISOString().split('T')[0];
@@ -289,82 +290,52 @@ function loadState(): AppState {
     const saved = localStorage.getItem('killOs_v3_state');
     if (saved) {
       const p = JSON.parse(saved);
-      const savedCategories = Array.isArray(p.categories) ? p.categories : [];
-      const existingTaskCategories = (p.tasks ?? DEFAULT_TASKS).map((t: TaskDefinition) => t.category);
-      const extraCategories = Array.from(new Set<string>(existingTaskCategories))
-        .filter((name: string) => !DEFAULT_CATEGORIES.some(c => c.name === name) && !savedCategories.some((c: CategoryDefinition) => c.name === name))
-        .map((name: string) => ({ id: crypto.randomUUID(), name, color: '#4488ff' }));
-      const savedWidgets = Array.isArray(p.dashboardWidgets) ? p.dashboardWidgets : [];
-      const dashboardWidgets = [
-        ...savedWidgets.filter((w: DashboardWidgetConfig) => DEFAULT_DASHBOARD_WIDGETS.some(d => d.id === w.id)),
-        ...DEFAULT_DASHBOARD_WIDGETS.filter(d => !savedWidgets.some((w: DashboardWidgetConfig) => w.id === d.id)),
-      ];
-      return {
-        tasks: p.tasks ?? DEFAULT_TASKS,
-        categories: savedCategories.length > 0 ? [...savedCategories, ...extraCategories] : [...DEFAULT_CATEGORIES, ...extraCategories],
-        taskColorPresets: Array.isArray(p.taskColorPresets) && p.taskColorPresets.length > 0 ? p.taskColorPresets : DEFAULT_TASK_COLOR_PRESETS,
-        dashboardWidgets,
-        progress: p.progress ?? {},
-        combo: { multiplier: 1.0, lastActionAt: null, comboWindowMs: (p.settings?.comboWindowMinutes ?? 60) * 60000, peakToday: p.combo?.peakToday ?? 1.0, ...p.combo },
-        timeline: p.timeline ?? [],
-        totalPointsToday: p.totalPointsToday ?? 0,
-        money: p.money ?? 0,
-        totalMoneyEarned: p.totalMoneyEarned ?? p.money ?? 0,
-        totalMoneySpent: p.totalMoneySpent ?? 0,
-        resources: p.resources ?? {},
-        streak: { ...DEFAULT_STREAK, ...p.streak },
-        rewards: p.rewards ?? DEFAULT_REWARDS,
-        redeemables: p.redeemables ?? [],
-        rewardCooldowns: p.rewardCooldowns ?? {},
-        calendar: p.calendar ?? {},
-        achievements: p.achievements ?? DEFAULT_ACHIEVEMENTS,
-        totalTasksCompleted: p.totalTasksCompleted ?? 0,
-        insightPlatforms: p.insightPlatforms ?? [],
-        insightEntries: p.insightEntries ?? [],
-        settings: { ...DEFAULT_SETTINGS, ...p.settings },
-        daySummarized: p.daySummarized ?? false,
-        focusSession: { type: 'pomodoro', durationMs: 25 * 60 * 1000, startedAt: null, pausedAt: null, elapsedMs: 0, isRunning: false, isComplete: false, ...p.focusSession },
-        focusTotalMs: p.focusTotalMs ?? 0,
-        notifications: [],
-      };
+      return hydrateFromPersisted(p);
     }
   } catch { /* ignore */ }
-  return {
-    tasks: DEFAULT_TASKS,
-    categories: DEFAULT_CATEGORIES.map(c => ({ ...c })),
-    taskColorPresets: DEFAULT_TASK_COLOR_PRESETS,
-    dashboardWidgets: DEFAULT_DASHBOARD_WIDGETS.map(w => ({ ...w })),
-    progress: {},
-    combo: { multiplier: 1.0, lastActionAt: null, comboWindowMs: DEFAULT_SETTINGS.comboWindowMinutes * 60000, peakToday: 1.0 },
-    timeline: [],
-    totalPointsToday: 0,
-    money: 0,
-    totalMoneyEarned: 0,
-    totalMoneySpent: 0,
-    resources: {},
-    streak: { ...DEFAULT_STREAK },
-    rewards: DEFAULT_REWARDS,
-    redeemables: [],
-    rewardCooldowns: {},
-    calendar: {},
-    achievements: DEFAULT_ACHIEVEMENTS.map(a => ({ ...a })),
-    totalTasksCompleted: 0,
-    insightPlatforms: [],
-    insightEntries: [],
-    settings: { ...DEFAULT_SETTINGS },
-    daySummarized: false,
-    focusSession: { type: 'pomodoro', durationMs: 25 * 60 * 1000, startedAt: null, pausedAt: null, elapsedMs: 0, isRunning: false, isComplete: false },
-    focusTotalMs: 0,
-    notifications: [],
-  };
+  return hydrateFromPersisted({} as Record<string, unknown>);
 }
 
-function saveState(state: AppState): void {
-  try {
-    const { notifications: _n, ...rest } = state;
-    void _n;
-    localStorage.setItem('killOs_v3_state', JSON.stringify(rest));
-  } catch { /* ignore */ }
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function hydrateFromPersisted(p: any): AppState {
+  const savedCategories = Array.isArray(p.categories) ? p.categories : [];
+  const existingTaskCategories = (p.tasks ?? DEFAULT_TASKS).map((t: TaskDefinition) => t.category);
+  const extraCategories = Array.from(new Set<string>(existingTaskCategories))
+    .filter((name: string) => !DEFAULT_CATEGORIES.some(c => c.name === name) && !savedCategories.some((c: CategoryDefinition) => c.name === name))
+    .map((name: string) => ({ id: crypto.randomUUID(), name, color: '#4488ff' }));
+  const savedWidgets = Array.isArray(p.dashboardWidgets) ? p.dashboardWidgets : [];
+  const dashboardWidgets = [
+    ...savedWidgets.filter((w: DashboardWidgetConfig) => DEFAULT_DASHBOARD_WIDGETS.some(d => d.id === w.id)),
+    ...DEFAULT_DASHBOARD_WIDGETS.filter(d => !savedWidgets.some((w: DashboardWidgetConfig) => w.id === d.id)),
+  ];
+  return {
+    tasks: p.tasks ?? DEFAULT_TASKS,
+    categories: savedCategories.length > 0 ? [...savedCategories, ...extraCategories] : [...DEFAULT_CATEGORIES, ...extraCategories],
+    taskColorPresets: Array.isArray(p.taskColorPresets) && p.taskColorPresets.length > 0 ? p.taskColorPresets : DEFAULT_TASK_COLOR_PRESETS,
+    dashboardWidgets,
+    progress: p.progress ?? {},
+    combo: { multiplier: 1.0, lastActionAt: null, comboWindowMs: (p.settings?.comboWindowMinutes ?? 60) * 60000, peakToday: p.combo?.peakToday ?? 1.0, ...p.combo },
+    timeline: p.timeline ?? [],
+    totalPointsToday: p.totalPointsToday ?? 0,
+    money: p.money ?? 0,
+    totalMoneyEarned: p.totalMoneyEarned ?? p.money ?? 0,
+    totalMoneySpent: p.totalMoneySpent ?? 0,
+    resources: p.resources ?? {},
+    streak: { ...DEFAULT_STREAK, ...p.streak },
+    rewards: p.rewards ?? DEFAULT_REWARDS,
+    redeemables: p.redeemables ?? [],
+    rewardCooldowns: p.rewardCooldowns ?? {},
+    calendar: p.calendar ?? {},
+    achievements: p.achievements ?? DEFAULT_ACHIEVEMENTS,
+    totalTasksCompleted: p.totalTasksCompleted ?? 0,
+    insightPlatforms: p.insightPlatforms ?? [],
+    insightEntries: p.insightEntries ?? [],
+    settings: { ...DEFAULT_SETTINGS, ...p.settings },
+    daySummarized: p.daySummarized ?? false,
+    focusSession: { type: 'pomodoro', durationMs: 25 * 60 * 1000, startedAt: null, pausedAt: null, elapsedMs: 0, isRunning: false, isComplete: false, ...p.focusSession },
+    focusTotalMs: p.focusTotalMs ?? 0,
+    notifications: [],
+  };
 }
 
 export function useAppState() {
@@ -372,6 +343,9 @@ export function useAppState() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [comboTimeLeft, setComboTimeLeft] = useState<number>(0);
   const [daySummary, setDaySummary] = useState<DaySummary | null>(null);
+
+  // Auto-save to cloud + localStorage on every state change
+  useAutoSave(state);
 
   // Persistent counters
   const [totalPurchases, setTotalPurchases] = useState(() => {
@@ -383,6 +357,18 @@ export function useAppState() {
   const [focusSessionsCount, setFocusSessionsCount] = useState(() => {
     try { return Number(localStorage.getItem('killOs_focusSessions') ?? '0'); } catch { return 0; }
   });
+
+  // Load state from cloud on mount (overwrites localStorage if cloud is newer)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const cloudState = await loadStateFromCloud();
+      if (!cancelled && cloudState) {
+        setState(cloudState as AppState);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Update streak on mount
   useEffect(() => {
@@ -397,8 +383,6 @@ export function useAppState() {
       return { ...prev, streak: { ...prev.streak, dailyStreak: newStreak, lastActiveDate: today }, daySummarized: false };
     });
   }, []);
-
-  useEffect(() => { saveState(state); }, [state]);
 
   // Combo timer - only resets when window expires, does NOT randomly change
   useEffect(() => {
